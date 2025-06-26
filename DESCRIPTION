@@ -1,0 +1,22 @@
+Package: EMGCR
+Type: Package
+Title: Fit a Mixture Cure Rate Model With Custom Link Function
+Version: 0.1.0
+Authors@R: c(person("Chaeyeon", "Yoo", email = "chaeyeon.yoo@uconn.edu", role = "aut"),
+  person("Dipak K.", "Dey", email = "dipak.dey@uconn.edu", role = "aut"),
+  person("Victor H.", "Lachos", email = "hlachos@uconn.edu", role = "aut"),
+  person("Jalmar M.F.", "Carrasco", email = "carrasco.jalmar@ufba.br", role = c("aut", "cre")))
+Maintainer: Jalmar M. F. Carrasco <carrasco.jalmar@ufba.br>
+Description: Tools to fit Mixture Cure Rate (MCR) models via the Expectation-Maximization (EM) algorithm, allowing for flexible link functions in the cure component and various survival distributions in the latency part. The package supports user-specified link functions, includes methods for parameter estimation and model diagnostics, and provides residual analysis tailored for cure models.
+License: GPL-3
+Encoding: UTF-8
+Depends: R (>= 4.2.0)
+Imports: survival, Formula, knitr, actuar, flexsurv, tibble
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+NeedsCompilation: no
+Packaged: 2025-06-26 17:35:33 UTC; jalmarcarrasco
+Author: Chaeyeon Yoo [aut],
+  Dipak K. Dey [aut],
+  Victor H. Lachos [aut],
+  Jalmar M.F. Carrasco [aut, cre]
