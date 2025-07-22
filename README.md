@@ -1,4 +1,4 @@
-# EMGLMLasso
+# EMGCR
 ## Mixture cure models with flexible survival and link functions: Parameter estimation via the EM algorithm
 ### Authors
 Chaeyeon Yoo,
