@@ -135,8 +135,6 @@ likeInvGauss <- function(params, time, status, x, B){
                    lower.tail = FALSE, log.p = FALSE)
   if(length(which(aux11 == 0)) > 0) aux11[which(aux11 == 0)] <- .Machine$double.xmin
   aux2<-B*(1-status)*log(aux11)
-  # if(length(which(aux1 == 0)) > 0) aux1[which(aux1 == 0)] <- .Machine$double.xmin
-  # if(length(which(aux2 == 0)) > 0) aux2[which(aux2 == 0)] <- .Machine$double.xmin
 
   return(-sum((aux1+aux2)))
 }
@@ -1004,7 +1002,7 @@ format_with_dash <- function(x){
 #' Fits a cure rate model using a flexible link function and a variety of survival distributions. The model accounts for a cured fraction through a logistic-type link and estimates the model via an EM-like algorithm.
 #'
 #' @import Formula
-#' @importFrom survival Surv survreg
+#' @importFrom survival Surv survreg survfit
 #' @import knitr
 #' @import flexsurv
 #' @import tibble
