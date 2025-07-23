@@ -78,7 +78,8 @@ compute_theta <- function(w, eta, link, tau) {
 }
 
 # Log-likelihood calculation
-likeMRC <- function(y, cc, x, w, alpha, beta, eta, link = "logit", dist = "weibull", tau = 1) {
+likeMRC <- function(y, cc, x, w, alpha, beta, eta, link = "logit",
+                    dist = "weibull", tau = 1) {
   lambda <- exp(x %*% beta)
   theta <- compute_theta(w, eta, link, tau)
 
@@ -123,17 +124,63 @@ likeMRC <- function(y, cc, x, w, alpha, beta, eta, link = "logit", dist = "weibu
   return(sum(log(pmax(ll, .Machine$double.xmin))))
 }
 #
+gradInvGauss <- function(params, time, status,x,B){
+  p <- ncol(x)
+  beta <- as.vector(params[1:p])
+  alpha <- params[p+1]
+  lambda <- exp(x%*%beta)
+
+  aux1 <- 1- pinvgauss(q=time, mean=lambda, shape=alpha,
+                       lower.tail = TRUE, log.p = FALSE)
+
+  if(length(which(aux1 == 0)) > 0) aux1[which(aux1 == 0)] <- .Machine$double.xmin
+
+  aux2 <- (time/lambda)-1
+  aux3 <- (time/lambda)+1
+
+  z1 <- sqrt(alpha/time)*aux2
+  z2 <- sqrt(alpha/time)*aux3
+
+
+  U1 <- 0.5*((1/alpha)-((time-lambda)**2/(lambda*time)))
+  U2 <- (aux2/2*sqrt(alpha*time))*dnorm(z1)+
+    (2*exp(2*alpha/lambda)/lambda)*pnorm(-z2)-
+    (aux3*exp(2*alpha/lambda)/sqrt(alpha*time))*dnorm(-z2)
+
+  Ualpha <- sum(B*status*U1-(1-status)*(U2/aux1))
+
+  Ubeta <- numeric()
+  for (j in 1:p){
+    xj <- x[,j]
+
+    aux4 <- alpha*(time-lambda)*xj/time
+    U3 <- aux4*(1+((time-lambda)/2*lambda))
+
+    U4 <- -sqrt(alpha/time)*(time*xj/lambda)*dnorm(z1)-
+      (2*alpha/lambda)*exp(2*alpha/lambda)*pnorm(-z2)+
+      sqrt(alpha/time)*(time*xj/lambda)*exp(2*alpha/lambda)*dnorm(-z2)
+
+    Ubeta[j] <- sum(B*status*U3-(1-status)*(U4/aux1))
+  }
+
+  U <- c(Ubeta,Ualpha)
+
+  return(U)
+}
 likeInvGauss <- function(params, time, status, x, B){
-  p<-ncol(x)
-  beta<-as.vector(params[1:p])
-  alpha<-params[p+1]
+  p <- ncol(x)
+  beta <- as.vector(params[1:p])
+  alpha <- params[p+1]
   lambda <- exp(x%*%beta)
 
   aux1<-B*status*dinvgauss(x=time, mean=lambda,
                            shape=alpha, log = TRUE)
   aux11<-pinvgauss(q=time, mean=lambda, shape=alpha,
                    lower.tail = FALSE, log.p = FALSE)
+
   if(length(which(aux11 == 0)) > 0) aux11[which(aux11 == 0)] <- .Machine$double.xmin
+  if (any(is.nan(aux11) | is.infinite(aux11))) return(1e+10)
+
   aux2<-B*(1-status)*log(aux11)
 
   return(-sum((aux1+aux2)))
@@ -1058,7 +1105,6 @@ MCRfit<-function(formula,data,dist="weibull",
   cc <- model.aux[, "status"]
   y <- model.aux[, "time"]
 
-  # Initial estimates
 
   if(dist != "invgauss"){
   fit0 <- survreg(survival::Surv(y, cc) ~ x - 1, dist = dist)
@@ -1188,8 +1234,10 @@ MCRfit<-function(formula,data,dist="weibull",
   }
   }else{
     pp <- ncol(x)
-    alpha <- 1
-    beta <- as.vector(rep(0,pp))
+    fit.ini <- survreg(survival::Surv(y,cc) ~ x - 1, dist = "weibull")
+    alpha <- 1/fit.ini$scale
+    beta <- -fit.ini$coeff*alpha
+    names(beta) <- NULL
     eta <- as.vector(glm(cc~w-1,family=binomial)$coeff)
 
     para1 <- c(alpha, beta, eta)
@@ -1235,17 +1283,21 @@ MCRfit<-function(formula,data,dist="weibull",
                   }
 
 
-      fit<- try(optim(c(beta,alpha),
-                      method = "L-BFGS-B", likeInvGauss,
+      #grad <- gradInvGauss(params=c(beta,alpha), time=y, status=cc,
+      #                  x=x,B=B)
+      #print(grad)
+
+      fit<- optim(par=c(beta,alpha),
+                      method = "L-BFGS-B", fn=likeInvGauss,
                       lower = c(rep(-Inf, pp),1e-06),
-                      upper = c(rep(Inf, pp),5),
+                      upper = c(rep(Inf, pp),Inf),
                       time=y, status=cc, x=x, B=B,
                       hessian=TRUE,
                       control = list(maxit = 30000,
                                      temp = 2000, trace = FALSE,
-                                     REPORT = 500)),
-                silent = TRUE)
+                                     REPORT = 500))
 
+        #print(fit$par)
 
         beta<- fit$par[1:pp]
         alpha<- fit$par[pp+1]
@@ -1267,7 +1319,7 @@ MCRfit<-function(formula,data,dist="weibull",
 
       iter <- iter+1
 
-      print(paste("Iteration :", iter,sep=""))
+      #print(paste("Iteration :", iter,sep=""))
 
       criteria <- (para2-para1)%*%(para2-para1)
 
