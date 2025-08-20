@@ -99,13 +99,13 @@ rMCM <- function(n, x, w, censor, alpha, beta, eta,
 
   # Latency model
   if (dist == "exponential") {
-    event_time[idx] <- (-log(1 - u) / lambda[idx])
+    event_time[idx] <- (-log(1 - u)) * lambda[idx]
   } else if (dist == "rayleigh") {
-    event_time[idx] <- (-log(1 - u) / lambda[idx])^(1/2)
+    event_time[idx] <- (-log(1 - u))^(1 / 2) * lambda[idx]
   } else if (dist == "weibull") {
-    event_time[idx] <- (-log(1 - u) / lambda[idx])^(1 / alpha)
+    event_time[idx] <- (-log(1 - u))^(1 / alpha) * lambda[idx]
   } else if (dist == "lognormal") {
-    event_time[idx] <- exp(qnorm(u) * alpha - log(lambda[idx]))
+    event_time[idx] <- exp(qnorm(u) * alpha + log(lambda[idx]))
   } else if (dist == "loglogistic") {
     event_time[idx] <- lambda[idx] * (u / (1 - u))^(1 / alpha)
   } else if (dist == "invgauss") {
