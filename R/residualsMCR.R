@@ -68,14 +68,14 @@ residuals.MCR <- function(object, type = c("cox-snell","quantile"), ...) {
   }
 
   if (dist == "exponential") {
-    aux <- pexp(q=y,rate=lambda,lower.tail = FALSE)
+    aux <- pexp(q=y,rate=1/lambda,lower.tail = FALSE)
   } else if (dist == "rayleigh") {
-    aux <- pweibull(q=y,shape=2,scale=lambda**(-1/2),lower.tail = FALSE)
+    aux <- pweibull(q=y,shape=2,scale=lambda,lower.tail = FALSE)
   } else if (dist == "weibull") {
-    aux <- pweibull(q=y,shape=alpha,scale=(lambda)**(-1/alpha),
+    aux <- pweibull(q=y,shape=alpha,scale=lambda,
              lower.tail = FALSE)
   } else if (dist == "lognormal") {
-    aux <- plnorm(q=y,meanlog = -log(lambda),
+    aux <- plnorm(q=y,meanlog = log(lambda),
            sdlog = alpha,lower.tail = FALSE)
   } else if (dist == "loglogistic") {
     aux <- flexsurv::pllogis(q=y, shape=alpha,scale=lambda,

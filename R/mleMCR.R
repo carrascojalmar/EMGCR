@@ -1265,7 +1265,7 @@ MCRfit<-function(formula,data,dist="weibull",
     pp <- ncol(x)
     fit.ini <- survreg(survival::Surv(y,cc) ~ x - 1, dist = "weibull")
     alpha <- 1/fit.ini$scale
-    beta <- -fit.ini$coeff*alpha
+    beta <- fit.ini$coeff
     names(beta) <- NULL
     eta <- as.vector(glm(cc~w-1,family=binomial)$coeff)
 
