@@ -36,13 +36,14 @@ residuals.MCR <- function(object, type = c("cox-snell","quantile"), ...) {
   data <-object$data
   n <- object$n
 
+  mf1 <- model.frame(Formula(formula), data = data)
+  x <- model.matrix(Formula(formula), data = mf1, rhs = 1)
+  w <- model.matrix(Formula(formula), data = mf1, rhs = 2)
+
   mf <- model.frame(Formula(formula), data = data)
   model.aux <- model.response(mf)
   cc <- model.aux[, "status"]
   y <- model.aux[, "time"]
-
-  x <- model.matrix(Formula(formula), data = data, rhs = 1)
-  w <- model.matrix(Formula(formula), data = data, rhs = 2)
 
   beta <- object$coefficients
   eta <- object$coefficients_cure
@@ -68,14 +69,14 @@ residuals.MCR <- function(object, type = c("cox-snell","quantile"), ...) {
   }
 
   if (dist == "exponential") {
-    aux <- pexp(q=y,rate=1/lambda,lower.tail = FALSE)
+    aux <- pexp(q=y,rate=lambda,lower.tail = FALSE)
   } else if (dist == "rayleigh") {
-    aux <- pweibull(q=y,shape=2,scale=lambda,lower.tail = FALSE)
+    aux <- pweibull(q=y,shape=2,scale=lambda**(-1/2),lower.tail = FALSE)
   } else if (dist == "weibull") {
-    aux <- pweibull(q=y,shape=alpha,scale=lambda,
+    aux <- pweibull(q=y,shape=alpha,scale=(lambda)**(-1/alpha),
              lower.tail = FALSE)
   } else if (dist == "lognormal") {
-    aux <- plnorm(q=y,meanlog = log(lambda),
+    aux <- plnorm(q=y,meanlog = -log(lambda),
            sdlog = alpha,lower.tail = FALSE)
   } else if (dist == "loglogistic") {
     aux <- flexsurv::pllogis(q=y, shape=alpha,scale=lambda,

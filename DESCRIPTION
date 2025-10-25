@@ -1,7 +1,7 @@
 Package: EMGCR
 Type: Package
 Title: Fit a Mixture Cure Rate Model With Custom Link Function
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: c(person("Chaeyeon", "Yoo", email = "chaeyeon.yoo@uconn.edu", role = "aut"),
   person("Dipak K.", "Dey", email = "dipak.dey@uconn.edu", role = "aut"),
   person("Victor H.", "Lachos", email = "hlachos@uconn.edu", role = "aut"),
@@ -16,7 +16,7 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 LazyData: true
 NeedsCompilation: no
-Packaged: 2025-08-20 20:41:40 UTC; jalmarcarrasco
+Packaged: 2025-10-25 10:21:58 UTC; jalmarcarrasco
 Author: Chaeyeon Yoo [aut],
   Dipak K. Dey [aut],
   Victor H. Lachos [aut],

@@ -69,8 +69,10 @@ qqMCR <- function(object, type = c("cox-snell", "quantile"),
   data    <- object$data
   n       <- object$n
   formula <- object$formula
-  x       <- model.matrix(Formula(formula), data = data, rhs = 1)
-  w       <- model.matrix(Formula(formula), data = data, rhs = 2)
+
+  mf1 <- model.frame(Formula(formula), data = data)
+  x <- model.matrix(Formula(formula), data = mf1, rhs = 1)
+  w <- model.matrix(Formula(formula), data = mf1, rhs = 2)
 
   beta  <- object$coefficients
   eta   <- object$coefficients_cure

@@ -18,8 +18,8 @@
 #' @param beta Numeric vector. Coefficients for the latency part.
 #' @param eta Numeric vector. Coefficients for the cure part.
 #' @param dist Character. Distribution for the latency part. Options: `"weibull"`, `"lognormal"`, `"loglogistic"`, `"invgauss"`, `"exponential"`, `"rayleigh"`.
-#' @param link Character. Link function for cure component. Options: `"logit"`, `"probit"`, `"rplogit"`, `"cauchit"`.
-#' @param tau Numeric. Tuning parameter for power link functions. Defaults to `1`.
+#' @param link Character. Link function for cure component. Options: `"logit"`, `"probit"`,`"plogit"` ,`"rplogit"`, `"cauchit"`.
+#' @param tau A numeric value used when \code{link = "plogit"} or \code{"rplogit"}. Defaults to 1.
 #'
 #' @return A list with elements:
 #' \describe{
@@ -99,13 +99,13 @@ rMCM <- function(n, x, w, censor, alpha, beta, eta,
 
   # Latency model
   if (dist == "exponential") {
-    event_time[idx] <- (-log(1 - u)) * lambda[idx]
+    event_time[idx] <- (-log(1 - u) / lambda[idx])
   } else if (dist == "rayleigh") {
-    event_time[idx] <- (-log(1 - u))^(1 / 2) * lambda[idx]
+    event_time[idx] <- (-log(1 - u) / lambda[idx])^(1/2)
   } else if (dist == "weibull") {
-    event_time[idx] <- (-log(1 - u))^(1 / alpha) * lambda[idx]
+    event_time[idx] <- (-log(1 - u) / lambda[idx])^(1 / alpha)
   } else if (dist == "lognormal") {
-    event_time[idx] <- exp(qnorm(u) * alpha + log(lambda[idx]))
+    event_time[idx] <- exp(qnorm(u) * alpha - log(lambda[idx]))
   } else if (dist == "loglogistic") {
     event_time[idx] <- lambda[idx] * (u / (1 - u))^(1 / alpha)
   } else if (dist == "invgauss") {

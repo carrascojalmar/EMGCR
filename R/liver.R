@@ -1,6 +1,6 @@
 #' Liver Cancer Data
 #'
-#' A sample of 2,766 patients diagnosed with liver cancer between 2012 and 2016, whose cancer grades were well identified. Available individual-level covariates include age at diagnosis, sex, histological grade of the liver cancer, number of relapses, and median household income.
+#' A sample of 2,766 patients diagnosed with liver cancer between 2012 and 2016, whose cancer grades were well identified. Available individual-level covariates include age at diagnosis, sex, pathological grade of the liver cancer, number of relapses, and median household income.
 #'
 #' The grade of the disease is categorized into four levels:
 #' \enumerate{
@@ -18,7 +18,7 @@
 #'   \item{ID}{Unique patient identifier}
 #'   \item{age}{Age as a factor (e.g., age group)}
 #'   \item{ageNumeric}{Age as a numeric variable}
-#'   \item{grade}{Histologic grade of liver cancer (I, II, III, IV)}
+#'   \item{grade}{Pathological grade of liver cancer (I, II, III, IV)}
 #'   \item{medh}{Median household income as factor (possibly grouped)}
 #'   \item{medhNumeric}{Median household income as numeric}
 #'   \item{relapse}{Number of relapses after first diagnosis}

@@ -34,9 +34,9 @@ rMCM(
 
 \item{dist}{Character. Distribution for the latency part. Options: \code{"weibull"}, \code{"lognormal"}, \code{"loglogistic"}, \code{"invgauss"}, \code{"exponential"}, \code{"rayleigh"}.}
 
-\item{link}{Character. Link function for cure component. Options: \code{"logit"}, \code{"probit"}, \code{"rplogit"}, \code{"cauchit"}.}
+\item{link}{Character. Link function for cure component. Options: \code{"logit"}, \code{"probit"},\code{"plogit"} ,\code{"rplogit"}, \code{"cauchit"}.}
 
-\item{tau}{Numeric. Tuning parameter for power link functions. Defaults to \code{1}.}
+\item{tau}{A numeric value used when \code{link = "plogit"} or \code{"rplogit"}. Defaults to 1.}
 }
 \value{
 A list with elements:

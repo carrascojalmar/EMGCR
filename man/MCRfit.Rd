@@ -49,12 +49,20 @@ Fits a cure rate model using a flexible link function and a variety of survival 
 \examples{
 require(EMGCR)
 
-data(liver)
-names(liver)
-
+data(liver2)
+names(liver2)
+liver2$sex <- factor(liver2$sex)
+liver2$grade <- factor(liver2$grade)
+liver2$radio <- factor(liver2$radio)
+liver2$chemo <- factor(liver2$chemo)
+str(liver2)
 model <- MCRfit(
-  survival::Surv(time, status) ~ age + medh + relapse + grade | sex + age + medh + grade,
-  data = liver
+  survival::Surv(time, status) ~ age + sex + grade + radio + chemo |
+    age + medh + grade + radio + chemo,
+  dist = "loglogistic",
+  link = "plogit",
+  tau = 0.15,
+  data = liver2
 )
 summary(model)
 
