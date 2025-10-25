@@ -1474,10 +1474,10 @@ print.summary.MCR <- function(x, digits = 5, ...) {
   cat("tau:", x$tau, "\n")
   cat("Number of Iterations:", x$iter, "\n\n")
 
-  cat("Coefficients (survival part):\n")
+  cat("Coefficients (Survival part):\n")
   print(format(x$coef_surv, digits = digits, nsmall = digits), quote = FALSE)
 
-  cat("\nCoefficients (cure part):\n")
+  cat("\nCoefficients (Uncured part):\n")
   print(format(x$coef_cure, digits = digits, nsmall = digits), quote = FALSE)
 
   if (!is.null(x$scale)) {
