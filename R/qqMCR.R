@@ -53,12 +53,11 @@ envelopeRQR <- function(x, nsim = 100) {
 #' @seealso \code{\link{MCRfit}}, \code{\link{residuals.MCR}}
 #'
 #' @examples
-#' \dontrun{
+#'
 #' data(liver)
-#' fit <- MCRfit(Surv(time, status) ~ age + medh + relapse + grade | sex + grade,
+#' fit <- MCRfit(survival::Surv(time, status) ~ age + medh + relapse + grade | sex + grade,
 #'               data = liver, dist = "weibull", link = "logit")
-#' qqMCR(fit, type = "cox-snell", envelope = TRUE, nsim = 50, censor = liver$status)
-#' }
+#' qqMCR(fit, type = "quantile", envelope = TRUE, nsim = 50, censor = liver$status)
 #'
 #' @export
 qqMCR <- function(object, type = c("cox-snell", "quantile"),

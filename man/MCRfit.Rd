@@ -64,6 +64,6 @@ model <- MCRfit(
   tau = 0.15,
   data = liver2
 )
-summary(model)
+model
 
 }

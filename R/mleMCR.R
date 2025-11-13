@@ -1095,7 +1095,7 @@ format_with_dash <- function(x){
 #'   tau = 0.15,
 #'   data = liver2
 #' )
-#' summary(model)
+#' model
 #'
 #' @export
 #'
