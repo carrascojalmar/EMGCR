@@ -4,7 +4,6 @@
 #'
 #' @import Formula
 #' @importFrom survival Surv
-#' @import knitr
 #' @import flexsurv
 #' @import tibble
 #' @import stats
@@ -14,19 +13,25 @@
 #' @param type Type of residual.
 #' @param ... Additional arguments (not used).
 #'
-#' @return A numeric vector of residuals.
+#' @return A numeric vector of residuals of class \code{"MCRresiduals"}. Printing it shows
+#'   the first six residuals and a summary; use \code{as.vector()} to drop the class.
 #' @export
 #' @method residuals MCR
 #'
 #' @examples
 #' data(liver)
-#' names(liver)
+#' liver$sex <- factor(liver$sex)
+#' liver$grade <- factor(liver$grade)
+#' liver$radio <- factor(liver$radio)
+#' liver$chemo <- factor(liver$chemo)
 #'
 #' model <- MCRfit(
-#'  survival::Surv(time, status) ~ age + medh + relapse + grade | sex + age + medh + grade,
-#'  data = liver
+#'   survival::Surv(time, status) ~ age + sex + grade + radio + chemo |
+#'     age + medh + grade + radio + chemo,
+#'   dist = "loglogistic", link = "plogit", tau = 0.15,
+#'   data = liver
 #' )
-#' summary(residuals(model,type="quantile"))
+#' residuals(model, type = "quantile")
 #'
 residuals.MCR <- function(object, type = c("cox-snell","quantile"), ...) {
 
@@ -69,14 +74,14 @@ residuals.MCR <- function(object, type = c("cox-snell","quantile"), ...) {
   }
 
   if (dist == "exponential") {
-    aux <- pexp(q=y,rate=lambda,lower.tail = FALSE)
+    aux <- pexp(q=y,rate=1/lambda,lower.tail = FALSE)
   } else if (dist == "rayleigh") {
-    aux <- pweibull(q=y,shape=2,scale=lambda**(-1/2),lower.tail = FALSE)
+    aux <- pweibull(q=y,shape=2,scale=lambda,lower.tail = FALSE)
   } else if (dist == "weibull") {
-    aux <- pweibull(q=y,shape=alpha,scale=(lambda)**(-1/alpha),
+    aux <- pweibull(q=y,shape=alpha,scale=lambda,
              lower.tail = FALSE)
   } else if (dist == "lognormal") {
-    aux <- plnorm(q=y,meanlog = -log(lambda),
+    aux <- plnorm(q=y,meanlog = log(lambda),
            sdlog = alpha,lower.tail = FALSE)
   } else if (dist == "loglogistic") {
     aux <- flexsurv::pllogis(q=y, shape=alpha,scale=lambda,
@@ -91,11 +96,26 @@ residuals.MCR <- function(object, type = c("cox-snell","quantile"), ...) {
 
   if (type == "cox-snell") {
     resCM <- -log(auxR)
-    return(resCM)
-
   } else if (type == "quantile") {
     resCM <- qnorm(cc*(1-auxR)+(1-cc)*runif(n,1-auxR))
-    return(resCM)
   }
 
+  resCM <- as.vector(resCM)
+  names(resCM) <- rownames(mf)
+  structure(resCM, type = type, class = "MCRresiduals")
+}
+
+#' @export
+print.MCRresiduals <- function(x, n = 6L, digits = max(3L, getOption("digits") - 3L), ...) {
+  label <- if (identical(attr(x, "type"), "quantile")) "Quantile" else "Cox-Snell"
+  res <- as.vector(x)
+  names(res) <- names(x)
+
+  cat(label, " residuals (n = ", length(res), "):\n", sep = "")
+  print(res[seq_len(min(n, length(res)))], digits = digits)
+  if (length(res) > n) cat("... (", length(res) - n, " more)\n", sep = "")
+
+  cat("\nSummary:\n")
+  print(summary(res), digits = digits)
+  invisible(x)
 }

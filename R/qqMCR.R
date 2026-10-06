@@ -31,7 +31,6 @@ envelopeRQR <- function(x, nsim = 100) {
 #'
 #' @import Formula
 #' @importFrom survival Surv
-#' @import knitr
 #' @import flexsurv
 #' @import tibble
 #' @import stats
@@ -55,8 +54,17 @@ envelopeRQR <- function(x, nsim = 100) {
 #' @examples
 #'
 #' data(liver)
-#' fit <- MCRfit(survival::Surv(time, status) ~ age + medh + relapse + grade | sex + grade,
-#'               data = liver, dist = "weibull", link = "logit")
+#' liver$sex <- factor(liver$sex)
+#' liver$grade <- factor(liver$grade)
+#' liver$radio <- factor(liver$radio)
+#' liver$chemo <- factor(liver$chemo)
+#'
+#' fit <- MCRfit(
+#'   survival::Surv(time, status) ~ age + sex + grade + radio + chemo |
+#'     age + medh + grade + radio + chemo,
+#'   dist = "loglogistic", link = "plogit", tau = 0.15,
+#'   data = liver
+#' )
 #' qqMCR(fit, type = "quantile", envelope = TRUE, nsim = 50, censor = liver$status)
 #'
 #' @export

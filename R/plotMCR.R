@@ -1,23 +1,21 @@
-compute_theta <- function(w, eta, link, tau) {
-  if (link == "logit") {
-    return(1 / (1 + exp(-w %*% eta)))
-  } else if (link == "probit") {
-    return(pnorm(w %*% eta))
-  } else if (link == "plogit") {
-    return((1 / (1 + exp(-w %*% eta)))^tau)
-  } else if (link == "rplogit") {
-    return(1 - (1 / (1 + exp(w %*% eta)))^tau)
-  } else if (link == "cauchit") {
-    return((1 / pi) * atan(w %*% eta) + 0.5)
-  } else {
-    stop("Unsupported link function")
-  }
-}
-#' Plot multiple MCR model fits against Kaplan-Meier curve
+#' Compare fitted MCR models with the Kaplan-Meier curve
+#'
+#' Plots the Kaplan-Meier estimate of the survival function together with the
+#' population survival function implied by one or more fitted mixture cure rate
+#' models.
+#'
+#' @details
+#' For each model, the fitted population survival function is averaged over the
+#' observations,
+#' \deqn{\hat S_{pop}(t) = \frac{1}{n} \sum_{i=1}^n \{1 - \hat\theta_i + \hat\theta_i \hat S(t \mid x_i)\},}
+#' where \eqn{\hat\theta_i} is the estimated probability of being uncured and
+#' \eqn{\hat S(t \mid x_i)} is the estimated survival function of the uncured.
+#' The Kaplan-Meier curve (dashed) is computed from the data of the first model,
+#' so all models should be fitted to the same data. Curves are coloured by
+#' latency distribution.
 #'
 #' @import Formula
 #' @import survival
-#' @import knitr
 #' @import flexsurv
 #' @import tibble
 #' @import stats
@@ -26,10 +24,8 @@ compute_theta <- function(w, eta, link, tau) {
 #'
 #' @param ... One or more fitted MCR objects from \code{MCRfit()}.
 #'
-#' @return A ggplot object with Kaplan-Meier and survival curves for each model.
+#' @return A \code{ggplot} object.
 #' @export
-
-
 plot.MCR <- function(...) {
   fits <- list(...)
 
@@ -71,15 +67,13 @@ plot.MCR <- function(...) {
       t <- times[j]
 
       if (dist == "exponential") {
-        surv_i <- pexp(t, rate = lambda, lower.tail = FALSE)
+        surv_i <- pexp(t, rate = 1 / lambda, lower.tail = FALSE)
       } else if (dist == "rayleigh") {
-        scale <- lambda^(-1 / 2)
-        surv_i <- pweibull(t, shape = 2, scale = scale, lower.tail = FALSE)
+        surv_i <- pweibull(t, shape = 2, scale = lambda, lower.tail = FALSE)
       } else if (dist == "weibull") {
-        scale <- lambda^(-1 / alpha)
-        surv_i <- pweibull(t, shape = alpha, scale = scale, lower.tail = FALSE)
+        surv_i <- pweibull(t, shape = alpha, scale = lambda, lower.tail = FALSE)
       } else if (dist == "lognormal") {
-        surv_i <- plnorm(t, meanlog = -log(lambda), sdlog = alpha, lower.tail = FALSE)
+        surv_i <- plnorm(t, meanlog = log(lambda), sdlog = alpha, lower.tail = FALSE)
       } else if (dist == "loglogistic") {
         surv_i <- flexsurv::pllogis(t, shape = alpha, scale = lambda, lower.tail = FALSE)
       } else if (dist == "invgauss") {
@@ -100,9 +94,9 @@ plot.MCR <- function(...) {
 
   ggplot() +
     geom_step(aes(x = km_fit$time, y = km_fit$surv), color = "black",
-              linetype = "dashed", size = 1, alpha = 0.8) +
+              linetype = "dashed", linewidth = 1, alpha = 0.8) +
     geom_line(data = df_all, aes(x = time, y = sFit,
-                                 color = dist), size = 2)+
+                                 color = dist), linewidth = 2)+
     scale_y_continuous(limits = c(0, 1)) +
     labs(
       title = "Kaplan-Meier vs Multiple Fitted Distributions",

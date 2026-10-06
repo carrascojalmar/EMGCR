@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotMCR.R
 \name{plot.MCR}
 \alias{plot.MCR}
-\title{Plot multiple MCR model fits against Kaplan-Meier curve}
+\title{Compare fitted MCR models with the Kaplan-Meier curve}
 \usage{
 \method{plot}{MCR}(...)
 }
@@ -10,8 +10,20 @@
 \item{...}{One or more fitted MCR objects from \code{MCRfit()}.}
 }
 \value{
-A ggplot object with Kaplan-Meier and survival curves for each model.
+A \code{ggplot} object.
 }
 \description{
-Plot multiple MCR model fits against Kaplan-Meier curve
+Plots the Kaplan-Meier estimate of the survival function together with the
+population survival function implied by one or more fitted mixture cure rate
+models.
+}
+\details{
+For each model, the fitted population survival function is averaged over the
+observations,
+\deqn{\hat S_{pop}(t) = \frac{1}{n} \sum_{i=1}^n \{1 - \hat\theta_i + \hat\theta_i \hat S(t \mid x_i)\},}
+where \eqn{\hat\theta_i} is the estimated probability of being uncured and
+\eqn{\hat S(t \mid x_i)} is the estimated survival function of the uncured.
+The Kaplan-Meier curve (dashed) is computed from the data of the first model,
+so all models should be fitted to the same data. Curves are coloured by
+latency distribution.
 }

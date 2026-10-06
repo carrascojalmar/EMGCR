@@ -1,23 +1,41 @@
 Package: EMGCR
 Type: Package
-Title: Fit a Mixture Cure Rate Model with Custom Link Function
-Version: 0.2.0
-Authors@R: c(person("Chaeyeon", "Yoo", email = "chaeyeon.yoo@uconn.edu", role = "aut"),
-  person("Dipak K.", "Dey", email = "dipak.dey@uconn.edu", role = "aut"),
-  person("Victor H.", "Lachos", email = "hlachos@uconn.edu", role = "aut"),
-  person("Jalmar M. F.", "Carrasco", email = "carrasco.jalmar@ufba.br", role = c("aut", "cre")))
-Maintainer: Jalmar M. F. Carrasco <carrasco.jalmar@ufba.br>
-Description: Tools to fit Mixture Cure Rate models via the Expectation-Maximization (EM) algorithm, allowing for flexible link functions in the cure component and various survival distributions in the latency part. The package supports user-specified link functions, includes methods for parameter estimation and model diagnostics, and provides residual analysis tailored for cure models. The classical theory methods used are described in Berkson, J. and Gage, R. P. (1952) <doi:10.2307/2281318>, Dempster, A. P., Laird, N. M. and Rubin, D. B. (1977) <https://www.jstor.org/stable/2984875>, Bazán, J., Torres-Avilés, F., Suzuki, A. and Louzada, F. (2017)<doi:10.1002/asmb.2215>.
+Title: Mixture Cure Rate Models with Flexible Link Functions via the EM
+        Algorithm
+Version: 0.3.0
+Authors@R: c(
+    person("Chaeyeon", "Yoo", email = "chaeyeon.yoo@uconn.edu", role = "aut"),
+    person("Dipak K.", "Dey", email = "dipak.dey@uconn.edu", role = "aut"),
+    person("Victor H.", "Lachos", email = "hlachos@uconn.edu", role = "aut"),
+    person("Jalmar M. F.", "Carrasco", email = "carrasco.jalmar@ufba.br",
+           role = c("aut", "cre"))
+  )
+Description: Fits mixture cure rate models by the Expectation-Maximization (EM)
+    algorithm. The incidence component (the probability of being uncured)
+    accepts the logit, probit, cauchit, power logit and reversed power logit
+    link functions, and the
+    latency component accepts the exponential, Rayleigh, Weibull, log-normal,
+    log-logistic and inverse Gaussian distributions. The package provides
+    parameter estimates with standard errors, simulation of data from the
+    model, and diagnostic tools based on residuals and simulated envelopes.
+    The methods build on Berkson and Gage (1952) <doi:10.2307/2281318>,
+    Dempster, Laird and Rubin (1977) <doi:10.1111/j.2517-6161.1977.tb01600.x>
+    and Bazán, Torres-Avilés, Suzuki and Louzada (2017) <doi:10.1002/asmb.2215>.
+URL: https://github.com/carrascojalmar/EMGCR
+BugReports: https://github.com/carrascojalmar/EMGCR/issues
 License: GPL-3
 Encoding: UTF-8
+Language: en-US
 Depends: R (>= 4.2.0)
-Imports: survival, Formula, knitr, actuar, flexsurv, tibble, ggplot2
+Imports: survival, Formula, actuar, flexsurv, tibble, ggplot2 (>=
+        3.4.0), stats, graphics
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 LazyData: true
 NeedsCompilation: no
-Packaged: 2025-11-13 19:42:20 UTC; jalmarcarrasco
+Packaged: 2026-10-06 20:09:43 UTC; jalmarcarrasco
 Author: Chaeyeon Yoo [aut],
   Dipak K. Dey [aut],
   Victor H. Lachos [aut],
   Jalmar M. F. Carrasco [aut, cre]
+Maintainer: Jalmar M. F. Carrasco <carrasco.jalmar@ufba.br>

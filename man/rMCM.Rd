@@ -20,37 +20,38 @@ rMCM(
 \arguments{
 \item{n}{Integer. Number of observations to simulate.}
 
-\item{x}{Matrix or numeric. Covariate matrix for the latency component (must include intercept if needed).}
+\item{x}{Matrix or numeric. Covariate matrix for the latency component. The first column must be the intercept (a column of ones).}
 
-\item{w}{Matrix or numeric. Covariate matrix for the cure component (no intercept assumed).}
+\item{w}{Matrix or numeric. Covariate matrix for the incidence part (the probability of being uncured). Include a column of ones if an intercept is wanted.}
 
 \item{censor}{Numeric. Maximum censoring time (uniformly distributed).}
 
-\item{alpha}{Numeric. Shape parameter for the survival distribution.}
+\item{alpha}{Numeric. Shape parameter \eqn{\alpha} of the latency distribution. Ignored for the exponential and Rayleigh distributions.}
 
-\item{beta}{Numeric vector. Coefficients for the latency part.}
+\item{beta}{Numeric vector. Coefficients for the latency part, which enter through the scale parameter \eqn{\lambda = \exp(x^\top \beta)} (see \code{\link{MCRfit}} for details).}
 
-\item{eta}{Numeric vector. Coefficients for the cure part.}
+\item{eta}{Numeric vector. Coefficients for the incidence part.}
 
 \item{dist}{Character. Distribution for the latency part. Options: \code{"weibull"}, \code{"lognormal"}, \code{"loglogistic"}, \code{"invgauss"}, \code{"exponential"}, \code{"rayleigh"}.}
 
-\item{link}{Character. Link function for cure component. Options: \code{"logit"}, \code{"probit"},\code{"plogit"} ,\code{"rplogit"}, \code{"cauchit"}.}
+\item{link}{Character. Link function for the probability of being uncured. Options: \code{"logit"}, \code{"probit"},\code{"plogit"} ,\code{"rplogit"}, \code{"cauchit"}.}
 
 \item{tau}{A numeric value used when \code{link = "plogit"} or \code{"rplogit"}. Defaults to 1.}
 }
 \value{
-A list with elements:
+A \code{\link[tibble]{tibble}} with columns:
 \describe{
 \item{time}{Observed (possibly censored) survival time.}
 \item{status}{Event indicator (1 = event, 0 = censored).}
-\item{x}{Covariate matrix for the latency component.}
-\item{w}{Covariate matrix for the cure component.}
-\item{pCcensur}{Percentage of cured individuals.}
-\item{pUCcensur}{Percentage of censored cases among the uncured.}
+\item{x1, x2, ...}{Columns of \code{x} without the intercept.}
+\item{w1, w2, ...}{Columns of \code{w}.}
 }
+It also has two attributes: \code{"pCcensur"}, the percentage of cured
+individuals, and \code{"pUCcensur"}, the percentage of censored observations
+among the uncured.
 }
 \description{
-Simulates survival data from a mixture cure rate model with covariates and user-defined link and latency distributions. Censoring is applied randomly.
+Simulates survival data from a mixture cure rate model with covariates, a chosen link function for the incidence part and a chosen latency distribution. Censoring times are drawn from a uniform distribution on \eqn{(0, \code{censor})}.
 }
 \examples{
 # Example: Simulating survival data using the inverse Gaussian distribution

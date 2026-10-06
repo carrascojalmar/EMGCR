@@ -93,19 +93,19 @@ likeMRC <- function(y, cc, x, w, alpha, beta, eta, link = "logit",
     th <- theta[i]
 
     if (dist == "exponential") {
-      dens <- dexp(time, rate = lam)
-      surv <- pexp(time, rate = lam, lower.tail = FALSE)
+      dens <- dexp(time, rate = 1/lam)
+      surv <- pexp(time, rate = 1/lam, lower.tail = FALSE)
     } else if (dist == "rayleigh") {
-      scale <- lam^(-1/2)
+      scale <- lam
       dens <- dweibull(time, shape = 2, scale = scale)
       surv <- pweibull(time, shape = 2, scale = scale, lower.tail = FALSE)
     } else if (dist == "weibull") {
-      scale <- lam^(-1 / alpha)
+      scale <- lam
       dens <- dweibull(time, shape = alpha, scale = scale)
       surv <- pweibull(time, shape = alpha, scale = scale, lower.tail = FALSE)
     } else if (dist == "lognormal") {
-      dens <- dlnorm(time, meanlog = -log(lam), sdlog = alpha)
-      surv <- plnorm(time, meanlog = -log(lam), sdlog = alpha, lower.tail = FALSE)
+      dens <- dnorm(log(time), mean = log(lam) , sd = alpha) / time
+      surv <- 1 - pnorm((log(time) - log(lam) ) / alpha)
     } else if (dist == "loglogistic") {
       dens <- flexsurv::dllogis(time, shape = alpha, scale = lam)
       surv <- flexsurv::pllogis(time, shape = alpha, scale = lam, lower.tail = FALSE)
@@ -128,10 +128,20 @@ gradInvGauss <- function(params, time, status,x,B){
   p <- ncol(x)
   beta <- as.vector(params[1:p])
   alpha <- params[p+1]
-  lambda <- exp(x%*%beta)
 
-  aux1 <- 1- pinvgauss(q=time, mean=lambda, shape=alpha,
-                       lower.tail = TRUE, log.p = FALSE)
+  # guard eta and lambda
+  eta    <- as.vector(x %*% beta)
+  eta    <- pmin(pmax(eta, -700), 700)
+  lambda <- exp(eta)
+  lambda <- pmax(lambda, 1e-12)  # avoid divide-by-tiny
+
+  logS <- pinvgauss(q = time, mean = lambda, shape = alpha,
+                     lower.tail = FALSE, log.p = TRUE)
+  logS[!is.finite(logS)] <- -Inf
+  logS <- pmax(logS, log(.Machine$double.eps))
+  invS <- exp(-logS)
+  aux1 <- pmin(invS, .Machine$double.xmax)
+
 
   if(length(which(aux1 == 0)) > 0) aux1[which(aux1 == 0)] <- .Machine$double.xmin
 
@@ -141,42 +151,44 @@ gradInvGauss <- function(params, time, status,x,B){
   z1 <- sqrt(alpha/time)*aux2
   z2 <- sqrt(alpha/time)*aux3
 
+  expTerm <- exp(pmin(2*alpha/lambda, 700))
 
-  U1 <- 0.5*((1/alpha)-((time-lambda)**2/(lambda*time)))
-  U2 <- (aux2/2*sqrt(alpha*time))*dnorm(z1)+
-    (2*exp(2*alpha/lambda)/lambda)*pnorm(-z2)-
-    (aux3*exp(2*alpha/lambda)/sqrt(alpha*time))*dnorm(-z2)
+  U1 <- 0.5*((1/alpha)-((time-lambda)**2/((lambda**2)*time)))
+  U2 <- (aux2/(2*sqrt(alpha*time)))*dnorm(z1)+
+    (2*expTerm/lambda)*pnorm(-z2)-
+    (aux3*expTerm/(2*sqrt(alpha*time)))*dnorm(-z2)
 
-  Ualpha <- sum(B*status*U1-(1-status)*(U2/aux1))
+  Ualpha <- sum(B*status*U1-(1-status)* B * (U2/aux1))
 
   Ubeta <- numeric()
   for (j in 1:p){
     xj <- x[,j]
 
     aux4 <- alpha*(time-lambda)*xj/time
-    U3 <- aux4*(1+((time-lambda)/2*lambda))
-
+    U3 <- alpha * (time - lambda) * xj/(lambda **2)
     U4 <- -sqrt(alpha/time)*(time*xj/lambda)*dnorm(z1)-
-      (2*alpha/lambda)*exp(2*alpha/lambda)*pnorm(-z2)+
-      sqrt(alpha/time)*(time*xj/lambda)*exp(2*alpha/lambda)*dnorm(-z2)
+      (2*alpha/lambda)*expTerm*pnorm(-z2) * xj +
+      sqrt(alpha/time)*(time*xj/lambda)*expTerm*dnorm(-z2)
 
-    Ubeta[j] <- sum(B*status*U3-(1-status)*(U4/aux1))
+    Ubeta[j] <- sum(B*status*U3-(1-status)*B * (U4/aux1))
   }
 
-  U <- c(Ubeta,Ualpha)
-
+  U <- - c(Ubeta,Ualpha)
+  U[!is.finite(U)] <- 0
   return(U)
 }
+
 likeInvGauss <- function(params, time, status, x, B){
   p <- ncol(x)
   beta <- as.vector(params[1:p])
   alpha <- params[p+1]
   lambda <- exp(x%*%beta)
 
-  aux1<-B*status*dinvgauss(x=time, mean=lambda,
-                           shape=alpha, log = TRUE)
-  aux11<-pinvgauss(q=time, mean=lambda, shape=alpha,
-                   lower.tail = FALSE, log.p = FALSE)
+  # optim() may try extreme values; NaNs are handled below, so the warnings are muted
+  aux1<-B*status*suppressWarnings(dinvgauss(x=time, mean=lambda,
+                           shape=alpha, log = TRUE))
+  aux11<-suppressWarnings(pinvgauss(q=time, mean=lambda, shape=alpha,
+                   lower.tail = FALSE, log.p = FALSE))
 
   if(length(which(aux11 == 0)) > 0) aux11[which(aux11 == 0)] <- .Machine$double.xmin
   if (any(is.nan(aux11) | is.infinite(aux11))) return(1e+10)
@@ -201,7 +213,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q),(p+q))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<- (B[i]*pdfN[i]/(theta[i])-(1-B[i])*pdfN[i]/(1-theta[i]))%*%(w[i,])
       #Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
       Aux4<-matrix(c(Aux1,Aux2),(p+q),1)
@@ -218,7 +230,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q),(p+q))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<- (B[i]*(1-theta[i])-(1-B[i])*theta[i])%*%(w[i,])
       #Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
       Aux4<-matrix(c(Aux1,Aux2),(p+q),1)
@@ -235,7 +247,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q),(p+q))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<-(B[i]*derv[i]/(theta[i])-(1-B[i])*derv[i]/(1-theta[i]))%*%(w[i,])
       #Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
       Aux4<-matrix(c(Aux1,Aux2),(p+q),1)
@@ -252,7 +264,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q),(p+q))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<-(B[i]*derv[i]/(theta[i])-(1-B[i])*derv[i]/(1-theta[i]))%*%(w[i,])
       #Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
       Aux4<-matrix(c(Aux1,Aux2),(p+q),1)
@@ -269,7 +281,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q),(p+q))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<-(B[i]*derv[i]/(theta[i])-(1-B[i])*derv[i]/(1-theta[i]))%*%(w[i,])
       #Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
       Aux4<-matrix(c(Aux1,Aux2),(p+q),1)
@@ -285,7 +297,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q),(p+q))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<- (B[i]*pdfN[i]/(theta[i])-(1-B[i])*pdfN[i]/(1-theta[i]))%*%(w[i,])
       #Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
       Aux4<-matrix(c(Aux1,Aux2),(p+q),1)
@@ -302,7 +314,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q),(p+q))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<- (B[i]*(1-theta[i])-(1-B[i])*theta[i])%*%(w[i,])
       #Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
       Aux4<-matrix(c(Aux1,Aux2),(p+q),1)
@@ -319,7 +331,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q),(p+q))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<-(B[i]*derv[i]/(theta[i])-(1-B[i])*derv[i]/(1-theta[i]))%*%(w[i,])
       #Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
       Aux4<-matrix(c(Aux1,Aux2),(p+q),1)
@@ -336,7 +348,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q),(p+q))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<-(B[i]*derv[i]/(theta[i])-(1-B[i])*derv[i]/(1-theta[i]))%*%(w[i,])
       #Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
       Aux4<-matrix(c(Aux1,Aux2),(p+q),1)
@@ -353,7 +365,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q),(p+q))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<-(B[i]*derv[i]/(theta[i])-(1-B[i])*derv[i]/(1-theta[i]))%*%(w[i,])
       #Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
       Aux4<-matrix(c(Aux1,Aux2),(p+q),1)
@@ -368,9 +380,9 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q+1),(p+q+1))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<- (B[i]*pdfN[i]/(theta[i])-(1-B[i])*pdfN[i]/(1-theta[i]))%*%(w[i,])
-      Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
+      Aux3 <- cc[i] * B[i] * (1/alpha + log(y[i]/lambda[i]) - log(y[i]/lambda[i]) * (y[i]/lambda[i])^(alpha)) - (1-cc[i]) * B[i] * (y[i]/lambda[i])^(alpha) * log(y[i]/lambda[i])
       Aux4<-matrix(c(Aux1,Aux2,Aux3),(p+q+1),1)
       MI<- MI+Aux4%*%t(Aux4)
     }
@@ -383,9 +395,9 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q+1),(p+q+1))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<- (B[i]*(1-theta[i])-(1-B[i])*theta[i])%*%(w[i,])
-      Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
+      Aux3 <- cc[i] * B[i] * (1/alpha + log(y[i]/lambda[i]) - log(y[i]/lambda[i]) * (y[i]/lambda[i])^(alpha)) - (1-cc[i]) * B[i] * (y[i]/lambda[i])^(alpha) * log(y[i]/lambda[i])
       Aux4<-matrix(c(Aux1,Aux2,Aux3),(p+q+1),1)
       MI<- MI+Aux4%*%t(Aux4)
     }
@@ -398,9 +410,9 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q+1),(p+q+1))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<-(B[i]*derv[i]/(theta[i])-(1-B[i])*derv[i]/(1-theta[i]))%*%(w[i,])
-      Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
+      Aux3 <- cc[i] * B[i] * (1/alpha + log(y[i]/lambda[i]) - log(y[i]/lambda[i]) * (y[i]/lambda[i])^(alpha)) - (1-cc[i]) * B[i] * (y[i]/lambda[i])^(alpha) * log(y[i]/lambda[i])
       Aux4<-matrix(c(Aux1,Aux2,Aux3),(p+q+1),1)
       MI<- MI+Aux4%*%t(Aux4)
     }
@@ -413,9 +425,9 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q+1),(p+q+1))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<-(B[i]*derv[i]/(theta[i])-(1-B[i])*derv[i]/(1-theta[i]))%*%(w[i,])
-      Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
+      Aux3 <- cc[i] * B[i] * (1/alpha + log(y[i]/lambda[i]) - log(y[i]/lambda[i]) * (y[i]/lambda[i])^(alpha)) - (1-cc[i]) * B[i] * (y[i]/lambda[i])^(alpha) * log(y[i]/lambda[i])
       Aux4<-matrix(c(Aux1,Aux2,Aux3),(p+q+1),1)
       MI<- MI+Aux4%*%t(Aux4)
     }
@@ -428,9 +440,9 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
     MI<-matrix(0,(p+q+1),(p+q+1))
 
     for (i in 1:n){
-      Aux1<-(cc[i]*B[i]*(1-y[i]^alpha*lambda[i])-(1-cc[i])*B[i]*(y[i]^alpha*lambda[i]))%*%(x[i,])
+      Aux1 <- (cc[i] * B[i] * (-alpha + alpha * (y[i]/lambda[i])^(alpha)) + (1-cc[i]) * B[i] * alpha * (y[i]/lambda[i])^(alpha)) %*% x[i, ]
       Aux2<-(B[i]*derv[i]/(theta[i])-(1-B[i])*derv[i]/(1-theta[i]))%*%(w[i,])
-      Aux3<-cc[i]*B[i]*(1/alpha+log(y[i])-lambda[i]*y[i]^alpha*log(y[i]))- (1-cc[i])*B[i]*(lambda[i]*y[i]^alpha*log(y[i]))
+      Aux3 <- cc[i] * B[i] * (1/alpha + log(y[i]/lambda[i]) - log(y[i]/lambda[i]) * (y[i]/lambda[i])^(alpha)) - (1-cc[i]) * B[i] * (y[i]/lambda[i])^(alpha) * log(y[i]/lambda[i])
       Aux4<-matrix(c(Aux1,Aux2,Aux3),(p+q+1),1)
       MI<- MI+Aux4%*%t(Aux4)
     }
@@ -455,7 +467,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
       Aux2<- (B[i]*pdfN[i]/(theta[i])-(1-B[i])*pdfN[i]/(1-theta[i]))%*%(w[i,])
       Aux3 <- cc[i]*B[i]*(-1/(alpha)+(Z[i]^2)/(alpha))+
         (1-cc[i])*B[i]*(Z[i]*pdfZ[i])/(alpha*S_y[i])
-      Aux4 <- matrix(c(Aux1,Aux2,Aux3), (p+q+1),1)
+      Aux4 <- matrix(c(Aux1, Aux2, Aux3), (p+q+1),1)
       MI<- MI+Aux4%*%t(Aux4)
 
     }
@@ -478,7 +490,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
       Aux2<- (B[i]*(1-theta[i])-(1-B[i])*theta[i])%*%(w[i,])
       Aux3 <- cc[i]*B[i]*(-1/(alpha)+(Z[i]^2)/(alpha))+
         (1-cc[i])*B[i]*(Z[i]*pdfZ[i])/(alpha*S_y[i])
-      Aux4 <- matrix(c(Aux1,Aux2,Aux3), (p+q+1),1)
+      Aux4 <- matrix(c(Aux1, Aux2, Aux3), (p+q+1),1)
       MI<- MI+Aux4%*%t(Aux4)
 
     }
@@ -503,7 +515,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
       Aux2<- (B[i]*derv[i]/(theta[i])-(1-B[i])*derv[i]/(1-theta[i]))%*%(w[i,])
       Aux3 <- cc[i]*B[i]*(-1/(alpha)+(Z[i]^2)/(alpha))+
         (1-cc[i])*B[i]*(Z[i]*pdfZ[i])/(alpha*S_y[i])
-      Aux4 <- matrix(c(Aux1,Aux2,Aux3), (p+q+1),1)
+      Aux4 <- matrix(c(Aux1, Aux2, Aux3), (p+q+1),1)
       MI<- MI+Aux4%*%t(Aux4)
 
     }
@@ -529,7 +541,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
       Aux2<- (B[i]*derv[i]/(theta[i])-(1-B[i])*derv[i]/(1-theta[i]))%*%(w[i,])
       Aux3 <- cc[i]*B[i]*(-1/(alpha)+(Z[i]^2)/(alpha))+
         (1-cc[i])*B[i]*(Z[i]*pdfZ[i])/(alpha*S_y[i])
-      Aux4 <- matrix(c(Aux1,Aux2,Aux3), (p+q+1),1)
+      Aux4 <- matrix(c(Aux1, Aux2, Aux3), (p+q+1),1)
       MI<- MI+Aux4%*%t(Aux4)
 
     }
@@ -554,7 +566,7 @@ epMCR <- function(y, cc, x, w, B, alpha, beta, eta, tau,
       Aux2<- (B[i]*derv[i]/(theta[i])-(1-B[i])*derv[i]/(1-theta[i]))%*%(w[i,])
       Aux3 <- cc[i]*B[i]*(-1/(alpha)+(Z[i]^2)/(alpha))+
         (1-cc[i])*B[i]*(Z[i]*pdfZ[i])/(alpha*S_y[i])
-      Aux4 <- matrix(c(Aux1,Aux2,Aux3), (p+q+1),1)
+      Aux4 <- matrix(c(Aux1, Aux2, Aux3), (p+q+1),1)
       MI<- MI+Aux4%*%t(Aux4)
 
     }
@@ -1046,33 +1058,48 @@ format_with_dash <- function(x){
 }
 #' Fit a Mixture Cure Rate (MCR) Survival Model
 #'
-#' Fits a cure rate model using a flexible link function and a variety of survival distributions. The model accounts for a cured fraction through a logistic-type link and estimates the model via an EM-like algorithm.
+#' Fits a mixture cure rate model by the Expectation-Maximization (EM) algorithm, with a flexible link function for the incidence (cure) component and a choice of survival distributions for the latency component.
+#'
+#' @details
+#' In the latency component, the covariates enter through the scale parameter
+#' \eqn{\lambda_i = \exp(x_i^\top \beta)}, as in an accelerated failure time model
+#' (the same convention as \code{\link[survival]{survreg}}). A positive coefficient
+#' therefore means longer survival times for uncured individuals. With shape
+#' parameter \eqn{\alpha}, the survival functions of the uncured are:
+#' \itemize{
+#'   \item exponential: \eqn{S(t) = \exp(-t/\lambda)};
+#'   \item Rayleigh: \eqn{S(t) = \exp\{-(t/\lambda)^2\}};
+#'   \item Weibull: \eqn{S(t) = \exp\{-(t/\lambda)^\alpha\}};
+#'   \item log-normal: \eqn{\log T \sim N(\log \lambda, \alpha^2)};
+#'   \item log-logistic: \eqn{S(t) = 1/\{1 + (t/\lambda)^\alpha\}};
+#'   \item inverse Gaussian: mean \eqn{\lambda} and shape \eqn{\alpha}.
+#' }
 #'
 #' @import Formula
 #' @importFrom survival Surv survreg survfit
-#' @import knitr
 #' @import flexsurv
 #' @import tibble
 #' @import stats
 #' @importFrom actuar dinvgauss pinvgauss
 #'
-#' @param formula A two-part formula of the form \code{Surv(time, status) ~ x | w}, where \code{x} are covariates for the survival part, and \code{w} are covariates for the cure fraction.
+#' @param formula A two-part formula of the form \code{Surv(time, status) ~ x | w}, where \code{x} are covariates for the survival part, and \code{w} are covariates for the incidence part (the probability of being uncured).
 #' @param data A data frame containing the variables in the model.
 #' @param dist A character string indicating the baseline distribution. Supported values are \code{"weibull"}, \code{"exponential"}, \code{"rayleigh"}, \code{"lognormal"}, \code{"loglogistic"}, and \code{"invgauss"}.
-#' @param link A character string specifying the link function for the cure fraction. Options are \code{"logit"}, \code{"probit"}, \code{"plogit"}, \code{"rplogit"}, and \code{"cauchit"}.
+#' @param link A character string specifying the link function for the probability of being uncured. Options are \code{"logit"}, \code{"probit"}, \code{"plogit"}, \code{"rplogit"}, and \code{"cauchit"}.
 #' @param tau A numeric value used when \code{link = "plogit"} or \code{"rplogit"}. Defaults to 1.
 #' @param maxit Maximum number of iterations for the EM-like algorithm. Defaults to 1000.
 #' @param tol Convergence tolerance. Defaults to 1e-5.
 #'
 #' @return An object of class \code{"MCR"}, which is a list containing:
 #' \item{coefficients}{Estimated regression coefficients for the survival part.}
-#' \item{coefficients_cure}{Estimated coefficients for the cure part.}
-#' \item{scale}{Estimated scale parameter of the baseline distribution.}
+#' \item{coefficients_cure}{Estimated coefficients for the incidence part, that is, for the probability of being uncured.}
+#' \item{scale}{Estimated shape parameter \eqn{\alpha} of the latency distribution (fixed at 1 for the exponential and 2 for the Rayleigh).}
 #' \item{loglik}{Final log-likelihood value.}
 #' \item{n}{Number of observations used in the model.}
 #' \item{deleted}{Number of incomplete cases removed before fitting.}
 #' \item{ep}{Estimated standard errors.}
-#' \item{iter}{Number of iterations used for convergence.}
+#' \item{iter}{Number of EM iterations.}
+#' \item{convergence}{Logical; \code{TRUE} if the EM algorithm converged within \code{maxit} iterations.}
 #' \item{dist}{Distribution used.}
 #' \item{link}{Link function used.}
 #' \item{tau}{Tau parameter used (if applicable).}
@@ -1080,22 +1107,22 @@ format_with_dash <- function(x){
 #' @examples
 #' require(EMGCR)
 #'
-#' data(liver2)
-#' names(liver2)
-#' liver2$sex <- factor(liver2$sex)
-#' liver2$grade <- factor(liver2$grade)
-#' liver2$radio <- factor(liver2$radio)
-#' liver2$chemo <- factor(liver2$chemo)
-#' str(liver2)
+#' data(liver)
+#' names(liver)
+#' liver$sex <- factor(liver$sex)
+#' liver$grade <- factor(liver$grade)
+#' liver$radio <- factor(liver$radio)
+#' liver$chemo <- factor(liver$chemo)
+#' str(liver)
 #' model <- MCRfit(
 #'   survival::Surv(time, status) ~ age + sex + grade + radio + chemo |
 #'     age + medh + grade + radio + chemo,
 #'   dist = "loglogistic",
 #'   link = "plogit",
 #'   tau = 0.15,
-#'   data = liver2
+#'   data = liver
 #' )
-#' model
+#' summary(model)
 #'
 #' @export
 #'
@@ -1125,11 +1152,9 @@ MCRfit<-function(formula,data,dist="weibull",
 
   if (dist %in% c("exponential", "rayleigh")) {
     alpha0 <- 1/fit0$scale
-    beta0 <- beta0*alpha0
     para1 <- c(beta0, eta0)
   } else if (dist == "weibull") {
     alpha0 <- 1/fit0$scale
-    beta0 <- beta0*alpha0
     para1 <- c(alpha0, beta0, eta0)
   } else if (dist == "lognormal") {
     alpha0 <- fit0$scale
@@ -1163,15 +1188,15 @@ MCRfit<-function(formula,data,dist="weibull",
   while((criteria > tol) && (iter <= maxit)){
 
     if(dist=="exponential"){
-      aux<- pexp(q=y,rate=lambda,lower.tail = FALSE) #para1[1]
+      aux<- pexp(q=y,rate=1/lambda,lower.tail = FALSE)
     } else if(dist=="rayleigh"){
-      aux<- pweibull(q=y,shape=2,scale=lambda**(-1/2),lower.tail = FALSE) #para1[1]
+      aux<- pweibull(q=y,shape=2,scale=lambda,lower.tail = FALSE)
     } else if(dist=="weibull"){
-      aux<- pweibull(q=y,shape=para1[1],scale=(lambda)**(-1/para1[1]),
-                     lower.tail = FALSE) #para1[1]
+      aux<- pweibull(q=y,shape=para1[1],scale=lambda,
+                     lower.tail = FALSE)
     } else if(dist=="lognormal"){
-      aux<- plnorm(q=y,meanlog = -log(lambda),
-                   sdlog = para1[1],lower.tail = FALSE) #para1[1]
+      aux<- plnorm(q=y,meanlog = log(lambda),
+                   sdlog = para1[1],lower.tail = FALSE)
     } else if(dist == "loglogistic"){
       aux <- flexsurv::pllogis(q=y, shape=para1[1],scale=lambda,
                                lower.tail = FALSE) #para1[1]
@@ -1206,13 +1231,13 @@ MCRfit<-function(formula,data,dist="weibull",
 
     if (dist %in% c("exponential", "rayleigh")) {
       alpha <- 1/fit$scale
-      beta <- -fit$coeff*alpha
+      beta <- fit$coeff
     } else if (dist == "weibull") {
       alpha <- 1/fit$scale
-      beta <- -fit$coeff*alpha
+      beta <- fit$coeff
     } else if (dist == "lognormal") {
       alpha <- fit$scale
-      beta <- -fit$coeff
+      beta <- fit$coeff
     } else if (dist == "loglogistic") {
       alpha <- 1/fit$scale
       beta <- fit$coeff
@@ -1248,7 +1273,7 @@ MCRfit<-function(formula,data,dist="weibull",
     pp <- ncol(x)
     fit.ini <- survreg(survival::Surv(y,cc) ~ x - 1, dist = "weibull")
     alpha <- 1/fit.ini$scale
-    beta <- -fit.ini$coeff*alpha
+    beta <- fit.ini$coeff
     names(beta) <- NULL
     eta <- as.vector(glm(cc~w-1,family=binomial)$coeff)
 
@@ -1349,6 +1374,12 @@ MCRfit<-function(formula,data,dist="weibull",
   names(beta) <- colnames(x)
   names(eta) <- colnames(w)
 
+  converged <- as.vector(criteria) <= tol
+  if (!converged) {
+    warning("The EM algorithm did not converge in ", maxit,
+            " iterations; consider increasing 'maxit'.", call. = FALSE)
+  }
+
   fit.MCR <- list(
     call = match.call(),
     formula = formula,
@@ -1360,6 +1391,7 @@ MCRfit<-function(formula,data,dist="weibull",
     deleted = sum(!complete.cases(model.frame(Formula(formula), data = data))),
     ep = ep,
     iter = iter,
+    convergence = converged,
     dist = dist,
     link = link,
     tau = tau,
@@ -1371,30 +1403,35 @@ MCRfit<-function(formula,data,dist="weibull",
 
 }
 #' @export
-print.MCR <- function(x, ...) {
+print.MCR <- function(x, digits = max(3L, getOption("digits") - 3L), ...) {
   cat("Call:\n")
   print(x$call)
 
-  cat("\nCoefficients (survival part):\n")
-  print(round(x$coefficients, 4))
+  cat("\nDistribution:", x$dist, "\n")
+  cat("Link:", x$link)
+  if (x$link %in% c("plogit", "rplogit")) cat(" (tau = ", x$tau, ")", sep = "")
+  cat("\n")
 
-  cat("\nCoefficients (cure part):\n")
-  print(round(x$coefficients_cure, 4))
+  cat("\nCoefficients (Survival part):\n")
+  print.default(format(x$coefficients, digits = digits), print.gap = 2L, quote = FALSE)
 
-  cat("\nScale:\n")
-  print(round(x$scale, 4))
+  cat("\nCoefficients (Uncured part):\n")
+  print.default(format(x$coefficients_cure, digits = digits), print.gap = 2L, quote = FALSE)
 
-  cat("\nLog-likelihood:", round(x$loglik, 4), "\n")
+  if (!(x$dist %in% c("exponential", "rayleigh"))) {
+    cat("\nShape (alpha):", format(x$scale, digits = digits), "\n")
+  }
+
+  cat("\nLog-likelihood:", format(x$loglik, digits = digits + 3L), "\n")
+  if (isFALSE(x$convergence)) cat("Warning: the EM algorithm did not converge.\n")
+  invisible(x)
 }
 
 #' @export
 summary.MCR <- function(object, ...) {
-  y <- model.response(model.frame(Formula(object$formula), data = eval(object$call$data)))
-  cc <- y[, "status"]
-  y <- y[, "time"]
-
-  x <- model.matrix(Formula(object$formula), data = eval(object$call$data), rhs = 1)
-  w <- model.matrix(Formula(object$formula), data = eval(object$call$data), rhs = 2)
+  mf <- model.frame(Formula(object$formula), data = object$data)
+  x <- model.matrix(Formula(object$formula), data = mf, rhs = 1)
+  w <- model.matrix(Formula(object$formula), data = mf, rhs = 2)
 
   coef_s <- object$coefficients
   coef_cure <- object$coefficients_cure
@@ -1413,43 +1450,44 @@ summary.MCR <- function(object, ...) {
 
 
   z_beta <- coef_s / std_beta
-  p_beta <- 2 * (1 - pnorm(abs(z_beta)))
+  p_beta <- 2 * pnorm(-abs(z_beta))
 
   z_eta <- coef_cure / std_eta
-  p_eta <- 2 * (1 - pnorm(abs(z_eta)))
+  p_eta <- 2 * pnorm(-abs(z_eta))
 
-  coef_surv <- data.frame(
-    Value = coef_s,
+  coef_surv <- cbind(
+    Estimate = coef_s,
     `Std. Error` = std_beta,
-    z = z_beta,
-    p = format.pval(p_beta, digits = 2, eps = 2e-16),
-    row.names = colnames(x),
-    check.names = FALSE
+    `z value` = z_beta,
+    `Pr(>|z|)` = p_beta
   )
+  rownames(coef_surv) <- colnames(x)
 
-  coef_cure <- data.frame(
-    Value = coef_cure,
+  coef_cure <- cbind(
+    Estimate = coef_cure,
     `Std. Error` = std_eta,
-    z = z_eta,
-    p = format.pval(p_eta, digits = 2 , eps = 2e-16),
-    row.names = colnames(w),
-    check.names = FALSE
+    `z value` = z_eta,
+    `Pr(>|z|)` = p_eta
   )
+  rownames(coef_cure) <- colnames(w)
 
-  if (!is.null(object$scale) && length(object$scale) == 1 && object$scale != 1 && object$scale != 2) {
-    std_alpha <- object$ep[1]
-    coef_scale <- data.frame(
-      Estimate = object$scale,
-      Std.Error = std_alpha,
-      row.names = "alpha"
-    )
+  if (n_alpha == 1) {
+    coef_scale <- cbind(Estimate = object$scale, `Std. Error` = std_alpha)
+    rownames(coef_scale) <- "alpha"
   } else {
     coef_scale <- NULL
   }
 
+  res <- as.vector(residuals(object, type = "quantile"))
+  res_q <- quantile(res[is.finite(res)], names = FALSE)
+  names(res_q) <- c("Min", "1Q", "Median", "3Q", "Max")
+
   out <- list(
     call = object$call,
+    residuals = res_q,
     dist = dist,
+    link = object$link,
+    convergence = object$convergence,
     loglik = value,
     AIC = -2 * value + 2 * length(ep),
     BIC = -2 * value + log(n) * length(ep),
@@ -1467,21 +1505,30 @@ summary.MCR <- function(object, ...) {
 print.summary.MCR <- function(x, digits = 5, ...) {
   cat("Call:\n")
   print(x$call)
+  cat("\nQuantile residuals:\n")
+  print(x$residuals, digits = digits)
   cat("\nDistribution:", x$dist, "\n")
+  cat("Link:", x$link)
+  if (x$link %in% c("plogit", "rplogit")) cat(" (tau = ", x$tau, ")", sep = "")
+  cat("\n")
   cat("Log-Likelihood:", formatC(x$loglik, digits = digits, format = "f"), "\n")
   cat("AIC:", formatC(x$AIC, digits = digits, format = "f"), "\n")
   cat("BIC:", formatC(x$BIC, digits = digits, format = "f"), "\n")
-  cat("tau:", x$tau, "\n")
-  cat("Number of Iterations:", x$iter, "\n\n")
+  cat("Number of Iterations:", x$iter, "\n")
+  if (!is.null(x$convergence)) cat("Convergence:", if (x$convergence) "yes" else "no", "\n")
+  cat("\n")
 
   cat("Coefficients (Survival part):\n")
-  print(format(x$coef_surv, digits = digits, nsmall = digits), quote = FALSE)
+  printCoefmat(x$coef_surv, digits = digits, P.values = TRUE, has.Pvalue = TRUE,
+               signif.stars = getOption("show.signif.stars"))
 
   cat("\nCoefficients (Uncured part):\n")
-  print(format(x$coef_cure, digits = digits, nsmall = digits), quote = FALSE)
+  printCoefmat(x$coef_cure, digits = digits, P.values = TRUE, has.Pvalue = TRUE,
+               signif.stars = getOption("show.signif.stars"))
 
   if (!is.null(x$scale)) {
-    cat("\nScale:\n")
-    print(format(x$scale, digits = digits, nsmall = digits), quote = FALSE)
+    cat("\nShape:\n")
+    print(x$scale, digits = digits)
   }
+  invisible(x)
 }

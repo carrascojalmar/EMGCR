@@ -15,13 +15,13 @@ MCRfit(
 )
 }
 \arguments{
-\item{formula}{A two-part formula of the form \code{Surv(time, status) ~ x | w}, where \code{x} are covariates for the survival part, and \code{w} are covariates for the cure fraction.}
+\item{formula}{A two-part formula of the form \code{Surv(time, status) ~ x | w}, where \code{x} are covariates for the survival part, and \code{w} are covariates for the incidence part (the probability of being uncured).}
 
 \item{data}{A data frame containing the variables in the model.}
 
 \item{dist}{A character string indicating the baseline distribution. Supported values are \code{"weibull"}, \code{"exponential"}, \code{"rayleigh"}, \code{"lognormal"}, \code{"loglogistic"}, and \code{"invgauss"}.}
 
-\item{link}{A character string specifying the link function for the cure fraction. Options are \code{"logit"}, \code{"probit"}, \code{"plogit"}, \code{"rplogit"}, and \code{"cauchit"}.}
+\item{link}{A character string specifying the link function for the probability of being uncured. Options are \code{"logit"}, \code{"probit"}, \code{"plogit"}, \code{"rplogit"}, and \code{"cauchit"}.}
 
 \item{tau}{A numeric value used when \code{link = "plogit"} or \code{"rplogit"}. Defaults to 1.}
 
@@ -32,38 +32,54 @@ MCRfit(
 \value{
 An object of class \code{"MCR"}, which is a list containing:
 \item{coefficients}{Estimated regression coefficients for the survival part.}
-\item{coefficients_cure}{Estimated coefficients for the cure part.}
-\item{scale}{Estimated scale parameter of the baseline distribution.}
+\item{coefficients_cure}{Estimated coefficients for the incidence part, that is, for the probability of being uncured.}
+\item{scale}{Estimated shape parameter \eqn{\alpha} of the latency distribution (fixed at 1 for the exponential and 2 for the Rayleigh).}
 \item{loglik}{Final log-likelihood value.}
 \item{n}{Number of observations used in the model.}
 \item{deleted}{Number of incomplete cases removed before fitting.}
 \item{ep}{Estimated standard errors.}
-\item{iter}{Number of iterations used for convergence.}
+\item{iter}{Number of EM iterations.}
+\item{convergence}{Logical; \code{TRUE} if the EM algorithm converged within \code{maxit} iterations.}
 \item{dist}{Distribution used.}
 \item{link}{Link function used.}
 \item{tau}{Tau parameter used (if applicable).}
 }
 \description{
-Fits a cure rate model using a flexible link function and a variety of survival distributions. The model accounts for a cured fraction through a logistic-type link and estimates the model via an EM-like algorithm.
+Fits a mixture cure rate model by the Expectation-Maximization (EM) algorithm, with a flexible link function for the incidence (cure) component and a choice of survival distributions for the latency component.
+}
+\details{
+In the latency component, the covariates enter through the scale parameter
+\eqn{\lambda_i = \exp(x_i^\top \beta)}, as in an accelerated failure time model
+(the same convention as \code{\link[survival]{survreg}}). A positive coefficient
+therefore means longer survival times for uncured individuals. With shape
+parameter \eqn{\alpha}, the survival functions of the uncured are:
+\itemize{
+\item exponential: \eqn{S(t) = \exp(-t/\lambda)};
+\item Rayleigh: \eqn{S(t) = \exp\{-(t/\lambda)^2\}};
+\item Weibull: \eqn{S(t) = \exp\{-(t/\lambda)^\alpha\}};
+\item log-normal: \eqn{\log T \sim N(\log \lambda, \alpha^2)};
+\item log-logistic: \eqn{S(t) = 1/\{1 + (t/\lambda)^\alpha\}};
+\item inverse Gaussian: mean \eqn{\lambda} and shape \eqn{\alpha}.
+}
 }
 \examples{
 require(EMGCR)
 
-data(liver2)
-names(liver2)
-liver2$sex <- factor(liver2$sex)
-liver2$grade <- factor(liver2$grade)
-liver2$radio <- factor(liver2$radio)
-liver2$chemo <- factor(liver2$chemo)
-str(liver2)
+data(liver)
+names(liver)
+liver$sex <- factor(liver$sex)
+liver$grade <- factor(liver$grade)
+liver$radio <- factor(liver$radio)
+liver$chemo <- factor(liver$chemo)
+str(liver)
 model <- MCRfit(
   survival::Surv(time, status) ~ age + sex + grade + radio + chemo |
     age + medh + grade + radio + chemo,
   dist = "loglogistic",
   link = "plogit",
   tau = 0.15,
-  data = liver2
+  data = liver
 )
-model
+summary(model)
 
 }

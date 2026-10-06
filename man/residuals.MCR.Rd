@@ -14,19 +14,25 @@
 \item{...}{Additional arguments (not used).}
 }
 \value{
-A numeric vector of residuals.
+A numeric vector of residuals of class \code{"MCRresiduals"}. Printing it shows
+the first six residuals and a summary; use \code{as.vector()} to drop the class.
 }
 \description{
 This function computes Global Cox-Snell and randomized quantile residuals for objects of class \code{MCR}.
 }
 \examples{
 data(liver)
-names(liver)
+liver$sex <- factor(liver$sex)
+liver$grade <- factor(liver$grade)
+liver$radio <- factor(liver$radio)
+liver$chemo <- factor(liver$chemo)
 
 model <- MCRfit(
- survival::Surv(time, status) ~ age + medh + relapse + grade | sex + age + medh + grade,
- data = liver
+  survival::Surv(time, status) ~ age + sex + grade + radio + chemo |
+    age + medh + grade + radio + chemo,
+  dist = "loglogistic", link = "plogit", tau = 0.15,
+  data = liver
 )
-summary(residuals(model,type="quantile"))
+residuals(model, type = "quantile")
 
 }
